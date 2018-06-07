@@ -1,19 +1,19 @@
 import torch
 import torch.optim as optim
 import torch.nn as nn
-from torch.autograd import Variable
+import torch.utils.data
 from torchvision import transforms, datasets
 
 # Training settings
-PATH_TO_DATASETS='....'
-BATCH_SIZE =32
-TEST_BATCH_SIZE=100
-EPOCHS=60
-STEP=45
-NO_CUDA=False
-IMAGE_CROP=64
-LOG_INTERVAL=10
-WORKERS=8
+PATH_TO_DATASETS = '....'
+BATCH_SIZE = 32
+TEST_BATCH_SIZE = 100
+EPOCHS = 60
+STEP = 45
+NO_CUDA = False
+IMAGE_CROP = 64
+LOG_INTERVAL = 10
+WORKERS = 8
 
 # image normalization
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -31,7 +31,9 @@ DICT_NAMES = {'imagenet12': 0,
 # Check for CUDA usage
 cuda = not NO_CUDA and torch.cuda.is_available()
 
-def train(model, dataset_name, prefix, bn=False, mirror=True, scaling=True, decay=0.0, adamlr=0.0001, lr=0.001, momentum=0.9 ):
+
+def train(model, dataset_name, prefix, bn=False, mirror=True, scaling=True,
+          decay=0.0, adamlr=0.0001, lr=0.001, momentum=0.9):
     # Training steps:
     # Preprocessing (cropping, hor-flipping, resizing) and get data
     # Initialize data processing threads
@@ -39,38 +41,33 @@ def train(model, dataset_name, prefix, bn=False, mirror=True, scaling=True, deca
 
     data_transform = get_data_transform(mirror, scaling)
 
-    dataset = datasets.ImageFolder(root=PATH_TO_DATASETS + '/' + dataset_name + '/train',
-                                   transform=data_transform)
+    dataset = datasets.ImageFolder(root=PATH_TO_DATASETS + '/' + dataset_name + '/train', transform=data_transform)
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=workers)
 
     # Build the test loader
     # (note that more complex data transforms can be used to provide better performances e.g. 10 crops)
-    data_transform = transforms.Compose([
-        transforms.CenterCrop(IMAGE_CROP),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
-    ])
+    data_transform = get_data_transform(False, False)
 
-    dataset = datasets.ImageFolder(root=PATH_TO_DATASETS + '/' + dataset_name + '/val',
-                                   transform=data_transform)
+    dataset = datasets.ImageFolder(root=PATH_TO_DATASETS + '/' + dataset_name + '/val', transform=data_transform)
     test_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=workers)
 
     ignored_params = list(map(id, model.fc.parameters()))
-    base_params = filter(lambda p: id(p) not in ignored_params, model.parameters())
+    base_params = filter(lambda p: id(p) not in ignored_params and p.requires_grad, model.parameters())
     # set optimizer
     optimizerA = optim.Adam(base_params, lr=adamlr, weight_decay=decay)
     optimizerB = optim.SGD(model.fc.parameters(), lr=lr, momentum=momentum, weight_decay=decay)
     schedulerA = optim.lr_scheduler.StepLR(optimizerA, STEP)
     schedulerB = optim.lr_scheduler.StepLR(optimizerB, STEP)
-    scheduler = MultipleOptimizer(schedulerA,schedulerB)
+    scheduler = MultipleOptimizer(schedulerA, schedulerB)
     optimizer = MultipleOptimizer(optimizerA, optimizerB)
 
     # set loss function
     cost_function = nn.CrossEntropyLoss()
-    # perform training epochs time
+    #Set the model index
+    model.set_index(DICT_NAMES[dataset_name])
     if cuda:
         model = model.cuda()
-
+    # perform training epochs time
     loss_epoch_min = -1
     for epoch in range(1, EPOCHS + 1):
         scheduler.step()

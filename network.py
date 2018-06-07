@@ -1,5 +1,6 @@
 import torch.nn as nn
-
+import torch
+from collections import OrderedDict
 
 # Define a residual block
 class BasicBlock(nn.Module):
@@ -36,7 +37,7 @@ class BasicBlock(nn.Module):
 
 
 class WideResNet(nn.Module):
-    def __init__(self, block, resnet_block, widening_factor=4, kernel_size=3, classes=1000):
+    def __init__(self, block, resnet_block, widening_factor=4, kernel_size=3, classes=[1000]):
         super(WideResNet, self).__init__()
         
         self.block = block
@@ -52,7 +53,7 @@ class WideResNet(nn.Module):
         
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         
-        self.fc = nn.ModuleList([nn.Linear(256, classes)])  # initialize with one class
+        self.fc = nn.ModuleList([nn.Linear(256, c) for c in classes])
         self.index = 0
         
     def set_index(self, index):
@@ -66,7 +67,6 @@ class WideResNet(nn.Module):
     def _make_layer_(self, block, planes, kernel_size, blocks, stride=1):
         strides = [stride] + [1]*(blocks-1)
         layers = []
-        
         for i in range(0, blocks):
             layers.append(block(self.block, self.in_channel, planes,kernel_size, stride=strides[i], first=(i == 0)))
             self.in_channel = planes
@@ -87,7 +87,35 @@ class WideResNet(nn.Module):
         return x
 
 
+def wide_resnet(block, model_classes, pretrained=None, frozen=False):
+    model = WideResNet(block, BasicBlock, 4, 3, classes=model_classes)
+    if pretrained:
+        try:
+            state = model.state_dict()
+            state.update(torch.load(pretrained)['state_dict'])
+            model.load_state_dict(state)
+        except:
+            model_dict = model.state_dict()
+            state_dict = torch.load(pretrained)['state_dict']
+            new_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                name = k[7:]  # remove `module.`
+                if name in model_dict:
+                    new_state_dict[name] = v
+            state = model.state_dict()
+            state.update(new_state_dict)
+            model.load_state_dict(state)
+
+    if frozen:
+        for name, param in model.named_parameters():
+            if "fc" in name:
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+    return model
+
+
 if __name__ == "__main__":
     net = WideResNet(nn.Conv2d, BasicBlock, widening_factor=4, classes=1000)
     print(net)
-    dict(net.named_parameters()).keys()
+    print(dict(net.named_parameters()).keys())
