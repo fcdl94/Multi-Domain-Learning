@@ -38,9 +38,9 @@ args = parser.parse_args()
 bn = args.bn
 
 if args.net == 'resnet':
-    model = net.wide_resnet(nn.Conv2d, d_names.values(), args.pretrained)
+    model = net.wide_resnet(d_names.values(), args.pretrained, args.frozen)
 elif args.net == 'piggyback':
-    model = net.wide_resnet(MaskedConv2d, d_names.values(), args.pretrained)
+    model = net.wide_resnet(d_names.values(), args.pretrained)
 else:
     raise ValueError(
         'The network you specified is not included in our model.'
