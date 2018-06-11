@@ -4,6 +4,10 @@ import torch.nn as nn
 import torch.utils.data
 from torchvision import transforms, datasets
 from datetime import datetime
+import numpy as np
+
+import visdom
+
 
 # Training settings
 PATH_TO_DATASETS='/home/lab2atpolito/FabioDatiSSD/'
@@ -28,6 +32,12 @@ DICT_NAMES = {'imagenet12': 0,
             'svhn': 7, 'ucf101': 8,
             'vgg-flowers': 9}
 
+
+# Initialize visualization tool
+vis = visdom.Visdom()
+
+# Define the visualization environment
+vis.env = "training"
 
 # Check for CUDA usage
 cuda = not NO_CUDA and torch.cuda.is_available()
@@ -75,6 +85,14 @@ def train(model, dataset_name, prefix, bn=False, mirror=True, scaling=True,
 
     if cuda:
         model = model.cuda()
+
+    # Initialize the lists needed for visualization, plus window offset for the graphs
+    iters = []
+    losses_training = []
+    losses_test = []
+    accuracies_test = []
+    win_offset = DICT_NAMES[dataset_name] * 3
+
     # perform training epochs time
     loss_epoch_min = -1
     for epoch in range(1, epochs + 1):
@@ -84,8 +102,42 @@ def train(model, dataset_name, prefix, bn=False, mirror=True, scaling=True,
             loss_epoch_min = loss_epoch
         result = test_epoch(model, test_loader, dataset_name, cost_function)
 
+        accuracies_test.append(result[0])
+        losses_test.append(result[1])
+        losses_training.append(loss_epoch)
+        iters.append(epoch)
+
         print('Train Epoch: {} \tTrainLoss: {:.6f} \tTestLoss: {:.6f}\tAccuracyTest: {:.6f}'.format(
             epoch, loss_epoch, result[1], result[0]))
+
+        # Print results
+        vis.line(
+            X=np.array(iters),
+            Y=np.array(losses_training),
+            opts={
+                'title': ' Training Loss ' + dataset_name,
+                'xlabel': 'iterations',
+                'ylabel': 'loss'},
+            name='Training Loss ' + dataset_name,
+            win=0 + win_offset)
+        vis.line(
+            X=np.array(iters),
+            Y=np.array(losses_test),
+            opts={
+                'title': ' Validation Loss ' + dataset_name,
+                'xlabel': 'iterations',
+                'ylabel': 'loss'},
+            name='Validation Loss ' + dataset_name,
+            win=1 + win_offset)
+        vis.line(
+            X=np.array(iters),
+            Y=np.array(accuracies_test),
+            opts={
+                'title': ' Accuracy ' + dataset_name,
+                'xlabel': 'iterations',
+                'ylabel': 'accuracy'},
+            name='Validation Accuracy ' + dataset_name,
+            win=2 + win_offset)
 
         # Save the model
         if loss_epoch < loss_epoch_min:
