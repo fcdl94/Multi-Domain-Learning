@@ -32,6 +32,8 @@ parser.add_argument('--scaling', type=int, default=1,
                     help='Whether to apply scaling as data-augmentation.')
 parser.add_argument('--frozen', type=int, default=0,
                     help='Whether to use feature extractor (0 - DEF) or fine tuning (1).')
+parser.add_argument('--epochs', type=int, default=80,
+                    help='Whether to use feature extractor (0 - DEF) or fine tuning (1).')
 
 args = parser.parse_args()
 
@@ -46,8 +48,6 @@ else:
         'The network you specified is not included in our model.'
         'Please specify one of the following: resnet, piggyback or quantized.')
 
-#if args.dataset in d_names.keys():
-    #training.train(model, args.dataset, args.prefix, mirror=args.mirror,
-    #               bn=args.bn, scaling=args.scaling)
-
-print(model)
+if args.dataset in d_names.keys():
+    training.train(model, args.dataset, args.prefix, mirror=args.mirror,
+                   bn=args.bn, scaling=args.scaling, epochs=args.epochs)

@@ -28,8 +28,15 @@ class MaskedConv2d(nn.modules.conv.Conv2d):
         self.reset_mask()
 
     def set_index(self, index):
-        if index >= 0:
+        if index == 0:
+            self.weight.requires_grad = True
+            if self.bias:
+                self.bias.requires_grad = True
+        if index > 0:
             self.index = index
+            self.weight.requires_grad = False
+            if self.bias:
+                self.bias.requires_grad = False
 
     def reset_mask(self):
         for mask_p in self.mask:

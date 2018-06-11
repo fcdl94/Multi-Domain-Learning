@@ -6,16 +6,16 @@ from collections import OrderedDict
 
 # Define a residual block
 class BasicBlock(nn.Module):
-    def __init__(self, block, inplanes, planes, kernel_size=3, stride=1, first=False):
+    def __init__(self, inplanes, planes, kernel_size=3, stride=1, first=False):
         super(BasicBlock, self).__init__()
-        self.conv1 = block(inplanes, planes, kernel_size=kernel_size, stride=stride, padding=1)
+        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=kernel_size, stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = block(planes, planes, kernel_size=kernel_size)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=kernel_size, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
 
         if first:
-            self.downsample = nn.Sequential(block(inplanes, planes, kernel_size=1, stride=stride, bias=False),
+            self.downsample = nn.Sequential(nn.Conv2d(inplanes, planes, kernel_size=1, stride=stride, bias=False),
                                           nn.BatchNorm2d(planes))
         self.stride = stride
         self.first = first
@@ -32,7 +32,7 @@ class BasicBlock(nn.Module):
         out = self.conv2(out)
         out = self.bn2(out)
 
-        out += residual
+        out = out + residual
         out = self.relu(out)
 
         return out
@@ -42,14 +42,16 @@ class BasicBlock(nn.Module):
 class BasicMaskedBlock(nn.Module):
     def __init__(self, inplanes, planes, kernel_size=3, stride=1, first=False, model_size=1):
         super(BasicMaskedBlock, self).__init__()
-        self.conv1 = MaskedConv2d(inplanes, planes, kernel_size=kernel_size, stride=stride, padding=1, model_size=model_size)
+        self.conv1 = MaskedConv2d(inplanes, planes, kernel_size=kernel_size, stride=stride, padding=1,
+                                  bias=False, model_size=model_size)
         self.bn1 = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = MaskedConv2d(planes, planes, kernel_size=kernel_size, model_size=model_size)
+        self.conv2 = MaskedConv2d(planes, planes, kernel_size=kernel_size, padding=1, bias=False, model_size=model_size)
         self.bn2 = nn.BatchNorm2d(planes)
 
         if first:
-            self.downsample = nn.Sequential(MaskedConv2d(inplanes, planes, kernel_size=1, stride=stride, bias=False, model_size=model_size),
+            self.downsample = nn.Sequential(MaskedConv2d(inplanes, planes, kernel_size=1, stride=stride,
+                                                         bias=False, model_size=model_size),
                                           nn.BatchNorm2d(planes))
         self.stride = stride
         self.first = first
@@ -107,7 +109,7 @@ class WideResNet(nn.Module):
         strides = [stride] + [1]*(blocks-1)
         layers = []
         for i in range(0, blocks):
-            layers.append(resnet_block(self.block, self.in_channel, planes, kernel_size, stride=strides[i], first=(i == 0)))
+            layers.append(resnet_block(self.in_channel, planes, kernel_size, stride=strides[i], first=(i == 0)))
             self.in_channel = planes
 
         return nn.Sequential(*layers)

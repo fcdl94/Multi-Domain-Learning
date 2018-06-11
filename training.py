@@ -3,17 +3,18 @@ import torch.optim as optim
 import torch.nn as nn
 import torch.utils.data
 from torchvision import transforms, datasets
+from datetime import datetime
 
 # Training settings
-PATH_TO_DATASETS = '....'
-BATCH_SIZE = 32
-TEST_BATCH_SIZE = 100
-EPOCHS = 60
-STEP = 45
-NO_CUDA = False
-IMAGE_CROP = 64
-LOG_INTERVAL = 10
-WORKERS = 8
+PATH_TO_DATASETS='/home/lab2atpolito/FabioDatiSSD/'
+BATCH_SIZE =32
+TEST_BATCH_SIZE=100
+EPOCHS=60
+STEP=45
+NO_CUDA=False
+IMAGE_CROP=64
+LOG_INTERVAL=10
+WORKERS=8
 
 # image normalization
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -33,7 +34,7 @@ cuda = not NO_CUDA and torch.cuda.is_available()
 
 
 def train(model, dataset_name, prefix, bn=False, mirror=True, scaling=True,
-          decay=0.0, adamlr=0.0001, lr=0.001, momentum=0.9):
+          decay=0.0, adamlr=0.0001, lr=0.001, momentum=0.9, epochs=EPOCHS):
     # Training steps:
     # Preprocessing (cropping, hor-flipping, resizing) and get data
     # Initialize data processing threads
@@ -65,22 +66,30 @@ def train(model, dataset_name, prefix, bn=False, mirror=True, scaling=True,
     cost_function = nn.CrossEntropyLoss()
     #Set the model index
     model.set_index(DICT_NAMES[dataset_name])
+
+    print("--------PARAMETERS----------")
+    for name, param in model.named_parameters():
+        print(name + " requires grad " + str(param.requires_grad))
+    print("--------          ----------")
+    print("cuda:" + str(cuda))
+
     if cuda:
         model = model.cuda()
     # perform training epochs time
     loss_epoch_min = -1
-    for epoch in range(1, EPOCHS + 1):
+    for epoch in range(1, epochs + 1):
         scheduler.step()
         loss_epoch = train_epoch(model, epoch, train_loader, optimizer, cost_function, bn)
-        if loss_epoch_min == -1 :
+        if loss_epoch_min == -1:
             loss_epoch_min = loss_epoch
         result = test_epoch(model, test_loader, dataset_name, cost_function)
 
         print('Train Epoch: {} \tTrainLoss: {:.6f} \tTestLoss: {:.6f}\tAccuracyTest: {:.6f}'.format(
-            epoch, loss_epoch, result[0], result[1]))
+            epoch, loss_epoch, result[1], result[0]))
 
         # Save the model
         if loss_epoch < loss_epoch_min:
+            loss_epoch_min = loss_epoch
             save_checkpoint({
                 'epoch': epoch,
                 'state_dict': model.state_dict(),
@@ -94,9 +103,10 @@ def train_epoch(model, epoch, train_loader, optimizers, cost_function, bn=False)
     # Set the model in training mode
     model.train()
 
-    # If BN parameters must be freezed, freeze them
+    print("Starting time of Epoch " + str(epoch) + ": " + str(datetime.now().time()))
+
+    # If BN parameters must be frozen, freeze them
     if not bn:
-        print("Deactivating BN")
         for m in model.modules():
             if isinstance(m, nn.BatchNorm1d) or isinstance(m, nn.BatchNorm2d):
                 m.eval()
@@ -126,12 +136,12 @@ def train_epoch(model, epoch, train_loader, optimizers, cost_function, bn=False)
 
         # Check for log and update holders
         if batch_idx % LOG_INTERVAL == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+            print('Train Epoch: {} [{:4d}/{:4d} ({:2.0f}%)]\tAvgLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
-                       100. * batch_idx / len(train_loader), loss.data[0]))
+                       100. * batch_idx / len(train_loader), loss.item()/BATCH_SIZE))
 
-        losses += loss.item()*data.size(0)
-        current += data.size(0)
+        losses += loss.item()
+        current += 1
 
     return losses / current
 
@@ -152,7 +162,7 @@ def test_epoch(model, test_loader, dataset, cost_function):
         output = model(data)
 
         # Update holders
-        test_loss += cost_function(output, target).data[0]  # sum up batch loss
+        test_loss += cost_function(output, target).item()  # sum up batch loss
         pred = torch.max(output, 1)[1]  # get the index of the max log-probability
         correct += pred.eq(target.data.view_as(pred)).cpu().sum()  # Check if the prediction is correct
 
