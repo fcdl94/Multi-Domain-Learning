@@ -40,12 +40,14 @@ bn = args.bn
 if args.net == 'resnet':
     model = net.wide_resnet(d_names.values(), args.pretrained, args.frozen)
 elif args.net == 'piggyback':
-    model = net.wide_resnet(d_names.values(), args.pretrained)
+    model = net.piggyback_net(d_names.values(), args.pretrained)
 else:
     raise ValueError(
         'The network you specified is not included in our model.'
         'Please specify one of the following: resnet, piggyback or quantized.')
 
-if args.dataset in d_names.keys():
-    training.train(model, args.dataset, args.prefix, mirror=args.mirror,
-                   bn=args.bn, scaling=args.scaling)
+#if args.dataset in d_names.keys():
+    #training.train(model, args.dataset, args.prefix, mirror=args.mirror,
+    #               bn=args.bn, scaling=args.scaling)
+
+print(model)

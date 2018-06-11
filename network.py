@@ -161,7 +161,7 @@ class PiggybackNet(nn.Module):
         strides = [stride] + [1] * (blocks - 1)
         layers = []
         for i in range(0, blocks):
-            layers.append(block(self.block, self.in_channel, planes, kernel_size,
+            layers.append(block(self.in_channel, planes, kernel_size,
                                 stride=strides[i], first=(i == 0), model_size=self.models))
             self.in_channel = planes
 
