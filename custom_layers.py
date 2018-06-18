@@ -12,13 +12,7 @@ class MaskedConv2d(nn.modules.conv.Conv2d):
                  bias=False, model_size=1):
 
         super(MaskedConv2d, self).__init__(
-                in_channels, out_channels, kernel_size, stride, padding, dilation,
-                groups, bias)
-
-        self.weight.requires_grad = False
-
-        if bias:
-            self.bias.requires_grad = False
+                in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
 
         self.threshold = 0.0
         self.mask = nn.ParameterList([nn.Parameter(torch.Tensor(out_channels, in_channels // groups, *self.kernel_size))
@@ -28,15 +22,14 @@ class MaskedConv2d(nn.modules.conv.Conv2d):
         self.reset_mask()
 
     def set_index(self, index):
-        if index == 0:
-            self.weight.requires_grad = True
-            if self.bias:
-                self.bias.requires_grad = True
-        if index > 0:
+        if index >= 0:
             self.index = index
             self.weight.requires_grad = False
             if self.bias:
                 self.bias.requires_grad = False
+            for i, ms in enumerate(self.mask.parameters()):
+                if not i == index:
+                    ms.requires_grad = False
 
     def reset_mask(self):
         for mask_p in self.mask:

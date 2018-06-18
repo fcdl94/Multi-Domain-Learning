@@ -36,18 +36,19 @@ DICT_NAMES = {'imagenet12': 0,
 # Initialize visualization tool
 vis = visdom.Visdom()
 
-# Define the visualization environment
-vis.env = "training"
-
 # Check for CUDA usage
 cuda = not NO_CUDA and torch.cuda.is_available()
 
 
 def train(model, dataset_name, prefix, bn=False, mirror=True, scaling=True,
-          decay=0.0, adamlr=0.0001, lr=0.001, momentum=0.9, epochs=EPOCHS):
+          decay=0.0, adamlr=0.0001, lr=0.001, momentum=0.9, epochs=EPOCHS, visdom_env="training"):
     # Training steps:
+
+    # Define the visualization environment
+    vis.env = visdom_env
+
     # Preprocessing (cropping, hor-flipping, resizing) and get data
-    # Initialize data processing threads
+    # Initialize data processing thread
     workers = WORKERS if cuda else 0
 
     data_transform = get_data_transform(mirror, scaling)
@@ -63,18 +64,25 @@ def train(model, dataset_name, prefix, bn=False, mirror=True, scaling=True,
     test_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=workers)
 
     ignored_params = list(map(id, model.fc.parameters()))
-    base_params = filter(lambda p: id(p) not in ignored_params and p.requires_grad, model.parameters())
+    base_params = list(filter(lambda p: id(p) not in ignored_params and p.requires_grad, model.parameters()))
+
     # set optimizer
-    optimizerA = optim.Adam(base_params, lr=adamlr, weight_decay=decay)
-    optimizerB = optim.SGD(model.fc.parameters(), lr=lr, momentum=momentum, weight_decay=decay)
-    schedulerA = optim.lr_scheduler.StepLR(optimizerA, STEP)
-    schedulerB = optim.lr_scheduler.StepLR(optimizerB, STEP)
-    scheduler = MultipleOptimizer(schedulerA, schedulerB)
-    optimizer = MultipleOptimizer(optimizerA, optimizerB)
+    if len(base_params) == 0:
+        optimizerB = optim.SGD(model.fc.parameters(), lr=lr, momentum=momentum, weight_decay=decay)
+        schedulerB = optim.lr_scheduler.StepLR(optimizerB, STEP)
+        scheduler = MultipleOptimizer(schedulerB)
+        optimizer = MultipleOptimizer(optimizerB)
+    else:
+        optimizerA = optim.Adam(base_params, lr=adamlr, weight_decay=decay)
+        optimizerB = optim.SGD(model.fc.parameters(), lr=lr, momentum=momentum, weight_decay=decay)
+        schedulerA = optim.lr_scheduler.StepLR(optimizerA, STEP)
+        schedulerB = optim.lr_scheduler.StepLR(optimizerB, STEP)
+        scheduler = MultipleOptimizer(schedulerA, schedulerB)
+        optimizer = MultipleOptimizer(optimizerA, optimizerB)
 
     # set loss function
     cost_function = nn.CrossEntropyLoss()
-    #Set the model index
+    # Set the model index
     model.set_index(DICT_NAMES[dataset_name])
 
     print("--------PARAMETERS----------")
@@ -94,6 +102,7 @@ def train(model, dataset_name, prefix, bn=False, mirror=True, scaling=True,
     win_offset = DICT_NAMES[dataset_name] * 3
 
     # perform training epochs time
+    best_accuracy = -1
     loss_epoch_min = -1
     for epoch in range(1, epochs + 1):
         scheduler.step()
@@ -139,15 +148,47 @@ def train(model, dataset_name, prefix, bn=False, mirror=True, scaling=True,
             name='Validation Accuracy ' + dataset_name,
             win=2 + win_offset)
 
+        if best_accuracy < result[0]:
+            best_accuracy = result[0]
+
         # Save the model
-        if loss_epoch < loss_epoch_min:
+        if loss_epoch <= loss_epoch_min:
             loss_epoch_min = loss_epoch
             save_checkpoint({
                 'epoch': epoch,
                 'state_dict': model.state_dict(),
-                'optimizerA': optimizerA.state_dict(),
-                'optimizerB': optimizerB.state_dict()
+                'optimizer': optimizer.state_dict()
             }, prefix + "_checkpoint.pth")
+
+    return best_accuracy
+
+
+def test(model, dataset_name):
+    # Training steps:
+    # Preprocessing (cropping, hor-flipping, resizing) and get data
+    # Initialize data processing threads
+    workers = WORKERS if cuda else 0
+
+    # Build the test loader
+    # (note that more complex data transforms can be used to provide better performances e.g. 10 crops)
+    data_transform = get_data_transform(False, False)
+
+    dataset = datasets.ImageFolder(root=PATH_TO_DATASETS + '/' + dataset_name + '/val', transform=data_transform)
+    test_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=workers)
+
+    # set loss function
+    cost_function = nn.CrossEntropyLoss()
+    # Set the model index
+    model.set_index(DICT_NAMES[dataset_name])
+
+    if cuda:
+        model = model.cuda()
+
+    result = test_epoch(model, test_loader, dataset_name, cost_function)
+    print('Test \tTestLoss: {:.6f}\tAccuracyTest: {:.6f}'.format(
+           result[1], result[0]))
+
+    return result[0]
 
 
 # Perform a single training epoch
@@ -220,11 +261,10 @@ def test_epoch(model, test_loader, dataset, cost_function):
 
     # Compute accuracy and loss
     total_loss = test_loss / len(test_loader.dataset)
-    accuracy = 100. * correct / len(test_loader.dataset)
+    accuracy = 100. * float(correct) / (len(test_loader.dataset))
 
-    print('Dataset ' + dataset + ' : Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)'.format(
-        total_loss, correct, len(test_loader.dataset),
-        accuracy))
+    print('Dataset ' + dataset + ' : Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)'.format(
+        total_loss, correct, len(test_loader.dataset), accuracy))
 
     results = [accuracy, total_loss]
 
@@ -284,3 +324,6 @@ class MultipleOptimizer(object):
     def step(self):
         for op in self.optimizers:
             op.step()
+
+    def state_dict(self):
+        return {op: op.state_dict for op in self.optimizers}

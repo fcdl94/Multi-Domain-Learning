@@ -84,7 +84,7 @@ class WideResNet(nn.Module):
         self.block = nn.Conv2d
         self.in_channel = 16
         
-        self.conv1 = self.block(3, self.in_channel, kernel_size=3, stride=1, padding=1)
+        self.conv1 = self.block(3, self.in_channel, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(self.in_channel)
         
         self.relu = nn.ReLU()
@@ -154,6 +154,19 @@ class PiggybackNet(nn.Module):
     def set_index(self, index):
         if index < len(self.fc):
             self.index = index
+            self.conv1.set_index(index)
+            for mod in self.layer1.modules():
+                if isinstance(mod, MaskedConv2d):
+                    mod.set_index(index)
+            for mod in self.layer2.modules():
+                if isinstance(mod, MaskedConv2d):
+                    mod.set_index(index)
+            for mod in self.layer3.modules():
+                if isinstance(mod, MaskedConv2d):
+                    mod.set_index(index)
+        for i,fc in enumerate(self.fc.modules()):
+            if not i == index:
+                fc.requires_grad = False
 
     def add_task(self, module):
         self.fc.append(module)
@@ -183,24 +196,20 @@ class PiggybackNet(nn.Module):
         return x
 
 
-def wide_resnet(model_classes, pretrained=None, frozen=False):
+def wide_resnet(model_classes, pretrained=None, frozen=False, imagenet_old=False):
     model = WideResNet(BasicBlock, classes=model_classes)
     if pretrained:
-        try:
-            state = model.state_dict()
-            state.update(torch.load(pretrained)['state_dict'])
-            model.load_state_dict(state)
-        except:
-            model_dict = model.state_dict()
-            state_dict = torch.load(pretrained)['state_dict']
-            new_state_dict = OrderedDict()
-            for k, v in state_dict.items():
-                name = k[7:]  # remove `module.`
-                if name in model_dict:
-                    new_state_dict[name] = v
-            state = model.state_dict()
-            state.update(new_state_dict)
-            model.load_state_dict(state)
+        old_state = torch.load(pretrained)['state_dict']
+        state = model.state_dict()
+        state.update(old_state)
+        model.load_state_dict(state, False)
+
+        if imagenet_old:
+            dict_fc = dict(model.fc.named_parameters())
+            dict_fc["0.weight"].data.copy_(old_state["fc.weight"].data)
+            dict_fc["0.bias"].data.copy_(old_state["fc.bias"].data)
+
+        print("Model pretrained loaded")
 
     if frozen:
         for name, param in model.named_parameters():
@@ -211,24 +220,19 @@ def wide_resnet(model_classes, pretrained=None, frozen=False):
     return model
 
 
-def piggyback_net(model_classes, pretrained=None):
+def piggyback_net(model_classes, pretrained=None, imagenet_old=False):
     model = PiggybackNet(classes=model_classes)
     if pretrained:
-        try:
-            state = model.state_dict()
-            state.update(torch.load(pretrained)['state_dict'])
-            model.load_state_dict(state)
-        except:
-            model_dict = model.state_dict()
-            state_dict = torch.load(pretrained)['state_dict']
-            new_state_dict = OrderedDict()
-            for k, v in state_dict.items():
-                name = k[7:]  # remove `module.`
-                if name in model_dict:
-                    new_state_dict[name] = v
-            state = model.state_dict()
-            state.update(new_state_dict)
-            model.load_state_dict(state)
+        old_state = torch.load(pretrained)['state_dict']
+        state = model.state_dict()
+        state.update(old_state)
+        model.load_state_dict(state, False)
 
+        if imagenet_old:
+            dict_fc = dict(model.fc.named_parameters())
+            dict_fc["0.weight"].data.copy_(old_state["fc.weight"].data)
+            dict_fc["0.bias"].data.copy_(old_state["fc.bias"].data)
+
+        print("Model pretrained loaded")
     return model
 
