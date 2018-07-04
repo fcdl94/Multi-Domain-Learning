@@ -62,7 +62,7 @@ if __name__ == '__main__':
     if args.dataset in d_names.keys():
         if not args.test:
             accuracy = training.train(model, args.dataset, args.prefix, mirror=args.mirror, bn=args.bn,
-                                      scaling=args.scaling, epochs=args.epochs, visdom=args.visdom)
+                                      scaling=args.scaling, epochs=args.epochs, visdom_env=args.visdom)
         else:
             accuracy = training.test(model, args.dataset)
 

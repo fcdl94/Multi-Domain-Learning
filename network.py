@@ -164,9 +164,10 @@ class PiggybackNet(nn.Module):
             for mod in self.layer3.modules():
                 if isinstance(mod, MaskedConv2d):
                     mod.set_index(index)
-        for i,fc in enumerate(self.fc.modules()):
-            if not i == index:
-                fc.requires_grad = False
+            for i in range(0, self.models):
+                if i != index:
+                    self.fc[i].weight.requires_grad = False
+                    self.fc[i].bias.requires_grad = False
 
     def add_task(self, module):
         self.fc.append(module)

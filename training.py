@@ -10,7 +10,7 @@ import visdom
 
 
 # Training settings
-PATH_TO_DATASETS='/home/lab2atpolito/FabioDatiSSD/'
+PATH_TO_DATASETS='/home/lab2atpolito/FabioDatiSSD'
 BATCH_SIZE =32
 TEST_BATCH_SIZE=100
 EPOCHS=60
@@ -63,18 +63,29 @@ def train(model, dataset_name, prefix, bn=False, mirror=True, scaling=True,
     dataset = datasets.ImageFolder(root=PATH_TO_DATASETS + '/' + dataset_name + '/val', transform=data_transform)
     test_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=workers)
 
+    # Set the model index
+    # Important put it before the optimizer computation
+    model.set_index(DICT_NAMES[dataset_name])
+
+    if not bn:
+        for m in model.modules():
+            if isinstance(m, nn.BatchNorm1d) or isinstance(m, nn.BatchNorm2d):
+                m.weight.requires_grad = False
+                m.bias.requires_grad = False
+
     ignored_params = list(map(id, model.fc.parameters()))
-    base_params = list(filter(lambda p: id(p) not in ignored_params and p.requires_grad, model.parameters()))
+    base_params = list(filter(lambda p: (id(p) not in ignored_params) and p.requires_grad, model.parameters()))
+    fc_params = list(filter(lambda p: p.requires_grad, model.fc.parameters()))
 
     # set optimizer
     if len(base_params) == 0:
-        optimizerB = optim.SGD(model.fc.parameters(), lr=lr, momentum=momentum, weight_decay=decay)
+        optimizerB = optim.SGD(fc_params, lr=lr, momentum=momentum, weight_decay=decay)
         schedulerB = optim.lr_scheduler.StepLR(optimizerB, STEP)
         scheduler = MultipleOptimizer(schedulerB)
         optimizer = MultipleOptimizer(optimizerB)
     else:
         optimizerA = optim.Adam(base_params, lr=adamlr, weight_decay=decay)
-        optimizerB = optim.SGD(model.fc.parameters(), lr=lr, momentum=momentum, weight_decay=decay)
+        optimizerB = optim.SGD(fc_params, lr=lr, momentum=momentum, weight_decay=decay)
         schedulerA = optim.lr_scheduler.StepLR(optimizerA, STEP)
         schedulerB = optim.lr_scheduler.StepLR(optimizerB, STEP)
         scheduler = MultipleOptimizer(schedulerA, schedulerB)
@@ -82,8 +93,6 @@ def train(model, dataset_name, prefix, bn=False, mirror=True, scaling=True,
 
     # set loss function
     cost_function = nn.CrossEntropyLoss()
-    # Set the model index
-    model.set_index(DICT_NAMES[dataset_name])
 
     print("--------PARAMETERS----------")
     for name, param in model.named_parameters():
@@ -176,10 +185,11 @@ def test(model, dataset_name):
     dataset = datasets.ImageFolder(root=PATH_TO_DATASETS + '/' + dataset_name + '/val', transform=data_transform)
     test_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=workers)
 
-    # set loss function
-    cost_function = nn.CrossEntropyLoss()
     # Set the model index
     model.set_index(DICT_NAMES[dataset_name])
+
+    # set loss function
+    cost_function = nn.CrossEntropyLoss()
 
     if cuda:
         model = model.cuda()
@@ -197,12 +207,12 @@ def train_epoch(model, epoch, train_loader, optimizers, cost_function, bn=False)
     model.train()
 
     print("Starting time of Epoch " + str(epoch) + ": " + str(datetime.now().time()))
-
     # If BN parameters must be frozen, freeze them
     if not bn:
         for m in model.modules():
             if isinstance(m, nn.BatchNorm1d) or isinstance(m, nn.BatchNorm2d):
                 m.eval()
+
     # Init holders
     losses = 0
     current = 0
