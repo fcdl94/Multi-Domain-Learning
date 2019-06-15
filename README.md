@@ -12,8 +12,8 @@ Many parts of the code were made by [Massimiliano Mancini](https://scholar.googl
 ___
 
 This code require to have installed:
-* [Pytorch](https://pytorch.org/)
-* Numpy
-* [Visdom](https://github.com/facebookresearch/visdom)
+* [Pytorch](https://pytorch.org/) (at least 0.4.0)
+* Numpy (I'm using 1.16.2, maybe it works also with older versions)
+* [Visdom](https://github.com/facebookresearch/visdom) (I'm using 0.1.8.8)
 
 And it's mandatory to have CUDA configured if you'd run it on NVIDIA GPUs
