@@ -24,7 +24,7 @@ ___
 Commands to run the code:
 
 <code>
-python main.py \[Arguments]
+python main.py [Arguments]
 </code>
 
 The most important arguments are:
