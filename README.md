@@ -6,6 +6,7 @@ The accepted data-set are those included in the [decathlon challenge](https://ww
 There are mainly two model:
 1. 28 Wide Residual network that can be used both as Feature extractor or with fine tuning.
 2. A [piggyback](https://arxiv.org/abs/1801.06519) network that is similar to a 28 resnet but applies binary mask that are dataset-specific.
+3. A [quantized](http://arxiv.org/abs/1805.11119v2) network that is similar in spirit to Piggyback, but adds an affine transformation to the binary mask, increasing the network capacity.
 
 Many parts of the code were made by [Massimiliano Mancini](https://scholar.google.it/citations?user=bqTPA8kAAAAJ&hl=it) that helped me a lot in rearraning the code.
 
